@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water SIM</title>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background-color: #f0f0f0;
+      }
+      canvas {
+        background-color: white;
+        border: 1px solid #000;
+      }
+    </style>
+  </head>
+<body>
+  <canvas id="canva" width="400" height="400"></canvas>
+
+  <script>
+    const canvas = document.getElementById('canva');
+    const ctx = canvas.getContext('2d');
+
+    const size = Math.floor(window.innerHeight * 0.9);
+    canvas.width = size;
+    canvas.height = size;
+
+    const gridSize = 80;
+    const cellSize = size / gridSize;
+
+    const grid = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+
+    function drawGrid() {
+      ctx.clearRect(0, 0, gridSize, gridSize)
+      for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+          const currGridValue = grid[row][col]
+
+          if (currGridValue === 1) {
+            ctx.fillStyle = "lightblue"
+            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize)
+          } else if (currGridValue === 2) {
+            ctx.fillStyle = "gray"
+            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize)
+          } else {
+            ctx.fillStyle = "white"
+            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize)
+          }
+        }
+      }
+    }
+
+    const topWaterRow = Math.floor(gridSize - (grid.length / 4))
+    function fillWater() {
+
+      const colisionY = 36
+      for (let row = topWaterRow; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+          grid[row][col] = 1
+        }
+      }
+    }
+
+    let lastRockDroppedAt;
+    canvas.addEventListener("mousedown", event => {
+      if (Date.now() - lastRockDroppedAt < 500) return
+      lastRockDroppedAt =  Date.now()
+      const rect = canvas.getBoundingClientRect();
+      const x = event.offsetX
+      const y = event.offsetY
+
+      const col = Math.floor(x / cellSize)
+      const row = Math.floor(y / cellSize)
+
+      async function animateWater(colisionRow, frame=0) {
+        const upperWaterRow = colisionRow-1
+        grid[upperWaterRow][col+frame+1] = 1
+        grid[upperWaterRow][col-frame-1] = 1
+        grid[upperWaterRow+1][col+frame] = 1
+        grid[upperWaterRow+1][col-frame] = 1
+
+        switch (frame) {
+          case 0:
+            grid[colisionRow][col] = 0
+            grid[colisionRow][col-1] = 0
+            grid[colisionRow][col+1] = 0
+            break;
+
+          case 1:
+            grid[colisionRow+1][col] = 0
+            grid[colisionRow-3][col-2] = 1
+            grid[colisionRow-3][col+2] = 1
+            break;
+
+          case 2:
+            grid[colisionRow+1][col] = 1
+            grid[colisionRow][col] = 1
+            grid[colisionRow][col-1] = 1  
+            grid[colisionRow][col+1] = 1
+
+            grid[colisionRow-3][col-2] = 0
+            grid[colisionRow-3][col+2] = 0
+            grid[colisionRow-3][col-4] = 1
+            grid[colisionRow-3][col+4] = 1
+            break;
+
+          case 3:
+            grid[colisionRow-3][col-4] = 0
+            grid[colisionRow-3][col+4] = 0
+            grid[colisionRow-2][col-4] = 1
+            grid[colisionRow-2][col+4] = 1
+            break;
+          
+          case 4:
+            grid[colisionRow-2][col-4] = 0
+            grid[colisionRow-2][col+4] = 0
+            break;
+        }
+
+        // remove wave water
+        if (frame > 2) {
+          grid[upperWaterRow][col+frame-2] = 0
+          grid[upperWaterRow][col-frame+2] = 0
+        }
+
+        // finish animation
+        if (frame > 15) {
+          grid[upperWaterRow][col+frame+1] = 0
+          grid[upperWaterRow][col-frame-1] = 0
+          grid[upperWaterRow][col+frame] = 0
+          grid[upperWaterRow][col-frame] = 0
+          grid[upperWaterRow][col+frame-1] = 0
+          grid[upperWaterRow][col-frame+1] = 0
+          return
+        }
+        setTimeout(() => {
+          animateWater(colisionRow, frame+1)
+          drawGrid()
+        }, 90)
+      }
+
+      function dropRock(currentRow, animationTimeout = 5) {
+        setTimeout(() => {
+          if (currentRow >= gridSize) {
+            grid[currentRow - 1][col] = 1
+            drawGrid()
+            return
+          }
+
+          if (currentRow > row && currentRow <= topWaterRow) {
+            grid[currentRow - 1][col] = 0
+          }
+
+          if (currentRow > topWaterRow + 1) {
+            grid[currentRow - 1][col] = 1
+            grid[currentRow][col] = 2
+          }
+
+          grid[currentRow][col] = 2
+
+          let colided = false
+          if (currentRow === topWaterRow) {
+            colided = true
+            animateWater(currentRow)
+          }
+
+          dropRock(currentRow + 1, colided ? 100 : animationTimeout)
+          drawGrid()
+        }, animationTimeout)
+      }
+
+      dropRock(row)
+    })
+
+    fillWater();
+    drawGrid();
+  </script>
+</body>
+</html>

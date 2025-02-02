@@ -23,6 +23,12 @@
   <canvas id="canva" width="400" height="400"></canvas>
 
   <script>
+    const WATER = 1
+    const ROCK = 2
+    const SKY = 3
+    const DARK_SKY = 4
+    const LIGHT_SKY = 5
+
     const canvas = document.getElementById('canva');
     const ctx = canvas.getContext('2d');
 
@@ -30,46 +36,212 @@
     canvas.width = size;
     canvas.height = size;
 
-    const gridSize = 80;
+    const gridSize = 100;
     const cellSize = size / gridSize;
 
     const grid = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+
+    const topWaterRow = Math.floor(gridSize - (grid.length / 4))
 
     function drawGrid() {
       ctx.clearRect(0, 0, gridSize, gridSize)
       for (let row = 0; row < gridSize; row++) {
         for (let col = 0; col < gridSize; col++) {
-          const currGridValue = grid[row][col]
+          switch (grid[row][col]) {
+            case WATER:
+              ctx.fillStyle = "lightblue"
+              break
 
-          if (currGridValue === 1) {
-            ctx.fillStyle = "lightblue"
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize)
-          } else if (currGridValue === 2) {
-            ctx.fillStyle = "gray"
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize)
-          } else {
-            ctx.fillStyle = "white"
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize)
+            case ROCK:
+              ctx.fillStyle = "gray"
+              break
+
+            case SKY:
+              ctx.fillStyle = "#4f02a0"
+              break
+            
+            case DARK_SKY:
+              ctx.fillStyle = "#0d006f"
+              break
+
+            case LIGHT_SKY:
+              ctx.fillStyle = "#b248c6"
+              break
+
+            default:
+              ctx.fillStyle = "white"
+              break
           }
+          ctx.fillRect(col * cellSize, row * cellSize, cellSize + 1, cellSize + 1)
         }
       }
     }
 
-    const topWaterRow = Math.floor(gridSize - (grid.length / 4))
-    function fillWater() {
-
-      const colisionY = 36
+    async function drawWater() {
       for (let row = topWaterRow; row < gridSize; row++) {
         for (let col = 0; col < gridSize; col++) {
-          grid[row][col] = 1
+          grid[row][col] = WATER
         }
       }
     }
 
+    // TODO: draw a smooth sky transition
+    async function drawSky() {
+      const darkSkySize = gridSize/5
+      const lightSkySize = gridSize/1.5
+
+      let currValue = DARK_SKY
+      let alternate = false
+      for (let row = 0; row < topWaterRow; row++) {
+        if (row > darkSkySize && row < lightSkySize) {
+          alternate = false
+          currValue = SKY
+        } else if (row > lightSkySize) {
+          alternate = false
+          currValue = LIGHT_SKY
+        }
+
+        if ((currValue === DARK_SKY && row > darkSkySize-7) || (currValue === SKY && row > lightSkySize-7)) {
+          alternate = true
+        }
+
+        for (let col = 0; col < gridSize; col++) {
+          if (alternate) {
+            const alternateValue = currValue === DARK_SKY ? SKY : LIGHT_SKY
+            if (row % 2 === 0) {
+              if (col % 2 === 0) {
+                grid[row][col] = alternateValue
+              } else {
+                grid[row][col] = currValue
+              }
+            } else {
+              if (col % 2 === 0) {
+                grid[row][col] = currValue
+              } else {
+                grid[row][col] = alternateValue
+              }
+            }
+          } else {
+            grid[row][col] = currValue
+          }
+        }
+        
+      }
+    }
+
+    async function animateWater(colisionRow, col, frame=0) {
+      const upperWaterRow = colisionRow-1
+      grid[upperWaterRow][col+frame+1] = WATER
+      grid[upperWaterRow][col-frame-1] = WATER
+      grid[upperWaterRow+1][col+frame] = WATER
+      grid[upperWaterRow+1][col-frame] = WATER
+
+      switch (frame) {
+        case 0:
+          grid[colisionRow][col] = LIGHT_SKY
+          grid[colisionRow][col-1] = LIGHT_SKY
+          grid[colisionRow][col+1] = LIGHT_SKY
+          break;
+
+        case 1:
+          grid[colisionRow+1][col] = LIGHT_SKY
+          grid[colisionRow-3][col-2] = WATER
+          grid[colisionRow-3][col+2] = WATER
+          break;
+
+        case 2:
+          grid[colisionRow+1][col] = WATER
+          grid[colisionRow][col] = WATER
+          grid[colisionRow][col-1] = WATER  
+          grid[colisionRow][col+1] = WATER
+
+          grid[colisionRow-3][col-2] = LIGHT_SKY
+          grid[colisionRow-3][col+2] = LIGHT_SKY
+          grid[colisionRow-3][col-4] = WATER
+          grid[colisionRow-3][col+4] = WATER
+          break;
+
+        case 3:
+          grid[colisionRow-3][col-4] = LIGHT_SKY
+          grid[colisionRow-3][col+4] = LIGHT_SKY
+          grid[colisionRow-2][col-4] = WATER
+          grid[colisionRow-2][col+4] = WATER
+          break;
+        
+        case 4:
+          grid[colisionRow-2][col-4] = LIGHT_SKY
+          grid[colisionRow-2][col+4] = LIGHT_SKY
+          break;
+      }
+
+      // remove wave water
+      if (frame > 2) {
+        grid[upperWaterRow][col+frame-2] = LIGHT_SKY
+        grid[upperWaterRow][col-frame+2] = LIGHT_SKY
+      }
+
+      // finish animation
+      if (frame === 15) {
+        grid[upperWaterRow][col+frame+1] = LIGHT_SKY
+        grid[upperWaterRow][col-frame-1] = LIGHT_SKY
+        grid[upperWaterRow][col+frame] = LIGHT_SKY
+        grid[upperWaterRow][col-frame] = LIGHT_SKY
+        grid[upperWaterRow][col+frame-1] = LIGHT_SKY
+        grid[upperWaterRow][col-frame+1] = LIGHT_SKY
+        return
+      }
+      setTimeout(() => {
+        animateWater(colisionRow, col, frame+1)
+        drawGrid()
+      }, 90)
+    }
+
+    async function dropRock(pressedRow, col, currentRow, oldGridValue, animationTimeout = 5) {
+      setTimeout(() => {
+        if (!grid[currentRow]) {
+          grid[currentRow-1][col] = WATER
+          drawGrid()
+          return
+        }
+        const old = grid[currentRow][col]
+        if (currentRow >= gridSize) {
+          grid[currentRow - 1][col] = WATER
+          drawGrid()
+          return
+        }
+
+        if (currentRow > pressedRow && currentRow <= topWaterRow) {
+          grid[currentRow - 1][col] = oldGridValue
+        }
+
+        if (currentRow > topWaterRow + 1) {
+          grid[currentRow - 1][col] = WATER
+          grid[currentRow][col] = ROCK
+        }
+
+        grid[currentRow][col] = ROCK
+
+        let colided = false
+        if (currentRow === topWaterRow) {
+          colided = true
+          animateWater(currentRow, col)
+        }
+
+
+        dropRock(pressedRow, col, currentRow + 1, old, colided ? 100 : animationTimeout)
+        drawGrid()
+      }, animationTimeout)
+    }
+
+    drawSky();
+    drawWater();
+    drawGrid();
+    
     let lastRockDroppedAt;
     canvas.addEventListener("mousedown", event => {
       if (Date.now() - lastRockDroppedAt < 500) return
       lastRockDroppedAt =  Date.now()
+
       const rect = canvas.getBoundingClientRect();
       const x = event.offsetX
       const y = event.offsetY
@@ -77,108 +249,8 @@
       const col = Math.floor(x / cellSize)
       const row = Math.floor(y / cellSize)
 
-      async function animateWater(colisionRow, frame=0) {
-        const upperWaterRow = colisionRow-1
-        grid[upperWaterRow][col+frame+1] = 1
-        grid[upperWaterRow][col-frame-1] = 1
-        grid[upperWaterRow+1][col+frame] = 1
-        grid[upperWaterRow+1][col-frame] = 1
-
-        switch (frame) {
-          case 0:
-            grid[colisionRow][col] = 0
-            grid[colisionRow][col-1] = 0
-            grid[colisionRow][col+1] = 0
-            break;
-
-          case 1:
-            grid[colisionRow+1][col] = 0
-            grid[colisionRow-3][col-2] = 1
-            grid[colisionRow-3][col+2] = 1
-            break;
-
-          case 2:
-            grid[colisionRow+1][col] = 1
-            grid[colisionRow][col] = 1
-            grid[colisionRow][col-1] = 1  
-            grid[colisionRow][col+1] = 1
-
-            grid[colisionRow-3][col-2] = 0
-            grid[colisionRow-3][col+2] = 0
-            grid[colisionRow-3][col-4] = 1
-            grid[colisionRow-3][col+4] = 1
-            break;
-
-          case 3:
-            grid[colisionRow-3][col-4] = 0
-            grid[colisionRow-3][col+4] = 0
-            grid[colisionRow-2][col-4] = 1
-            grid[colisionRow-2][col+4] = 1
-            break;
-          
-          case 4:
-            grid[colisionRow-2][col-4] = 0
-            grid[colisionRow-2][col+4] = 0
-            break;
-        }
-
-        // remove wave water
-        if (frame > 2) {
-          grid[upperWaterRow][col+frame-2] = 0
-          grid[upperWaterRow][col-frame+2] = 0
-        }
-
-        // finish animation
-        if (frame > 15) {
-          grid[upperWaterRow][col+frame+1] = 0
-          grid[upperWaterRow][col-frame-1] = 0
-          grid[upperWaterRow][col+frame] = 0
-          grid[upperWaterRow][col-frame] = 0
-          grid[upperWaterRow][col+frame-1] = 0
-          grid[upperWaterRow][col-frame+1] = 0
-          return
-        }
-        setTimeout(() => {
-          animateWater(colisionRow, frame+1)
-          drawGrid()
-        }, 90)
-      }
-
-      function dropRock(currentRow, animationTimeout = 5) {
-        setTimeout(() => {
-          if (currentRow >= gridSize) {
-            grid[currentRow - 1][col] = 1
-            drawGrid()
-            return
-          }
-
-          if (currentRow > row && currentRow <= topWaterRow) {
-            grid[currentRow - 1][col] = 0
-          }
-
-          if (currentRow > topWaterRow + 1) {
-            grid[currentRow - 1][col] = 1
-            grid[currentRow][col] = 2
-          }
-
-          grid[currentRow][col] = 2
-
-          let colided = false
-          if (currentRow === topWaterRow) {
-            colided = true
-            animateWater(currentRow)
-          }
-
-          dropRock(currentRow + 1, colided ? 100 : animationTimeout)
-          drawGrid()
-        }, animationTimeout)
-      }
-
-      dropRock(row)
+      dropRock(row, col, row, grid[row][col])
     })
-
-    fillWater();
-    drawGrid();
   </script>
 </body>
 </html>
